@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DEP: Dynamic Expert Pruning for Multi-Agent Systems</title>
+  <meta name="description" content="Dynamic Expert Pruning (DEP): a lightweight predictor reads an agent's system and task prompts and emits a per-request MoE expert mask in one shot, beating static pruning and merging on multi-agent workflows.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="DEP: Dynamic Expert Pruning for Multi-Agent Systems">
+  <meta property="og:description" content="Per-agent MoE expert masks predicted from prompts alone. 63.4% mean accuracy at 25% expert retention, where static pruning collapses below 7%.">
+  <meta property="og:type" content="website">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+
+  <style>
+    :root { --accent:#1f6fb2; --accent-dark:#123f66; --warm:#d0632e; }
+    body { font-family: 'Google Sans','Noto Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#fff; }
+    .hero-body .title { color:#1a1a2e; }
+    .author-block { display:inline-block; margin:0 0.4rem; font-size:1.15rem; color:var(--accent); }
+    .affil-block { font-size:1rem; color:#444; }
+    .pub-venue { color:var(--accent-dark); font-weight:600; letter-spacing:0.04em; }
+    .section { padding:2.2rem 1.5rem; }
+    .section-title { font-weight:700; color:#1a1a2e; }
+    .link-btn { margin:0.25rem; }
+    .button.is-soon { background:#e9ecf2; color:#666; border:none; cursor:default; }
+    .figure-caption { font-size:0.9rem; color:#555; margin-top:0.6rem; }
+    .hl-card { border:1px solid #e3e9f2; border-radius:12px; padding:1.2rem 1.3rem; height:100%; background:#fbfcfe; }
+    .hl-card .num { font-size:2rem; font-weight:700; color:var(--accent); line-height:1.1; }
+    .hl-card .num small { font-size:1rem; color:#777; font-weight:500; }
+    .hl-card p { color:#444; margin-top:0.4rem; }
+    .bg-soft { background:#f6f8fb; }
+    table.result-table { font-size:0.92rem; }
+    table.result-table thead th { background:#e8f0f8; color:#1a1a2e; text-align:center !important; }
+    table.result-table td.group { background:#f3f5f9; font-style:italic; color:#555; text-align:left; }
+    .ours-row { background:#e6f0fa !important; font-weight:600; }
+    .collapse { color:#b0413e; }
+    .pill { display:inline-block; background:#e8f0f8; color:var(--accent-dark); border-radius:999px; padding:0.15rem 0.7rem; font-size:0.82rem; margin:0.15rem; }
+    pre.bibtex { background:#1a1a2e; color:#e6e8f0; border-radius:10px; padding:1.2rem; overflow-x:auto; font-size:0.85rem; }
+    footer.footer { background:#f6f8fb; }
+    .eq-box { background:#fbfcfe; border:1px solid #e3e9f2; border-radius:10px; padding:0.6rem 1rem; margin:0.6rem 0; overflow-x:auto; }
+    .pipeline svg { width:100%; height:auto; max-width:960px; }
+    img { max-width:100%; height:auto; }
+  </style>
+</head>
+<body>
+
+<!-- ===================== HERO ===================== -->
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop has-text-centered">
+      <p class="pub-venue is-size-6 mb-3">Preprint &middot; 2026</p>
+      <h1 class="title is-2 publication-title">
+        Dynamic Expert Pruning for<br>Multi-Agent Systems
+      </h1>
+
+      <div class="is-size-5 mb-4">
+        <span class="author-block">Jabin Koo<sup>1</sup></span>
+        <span class="author-block">Soheil Abbasloo<sup>2</sup></span>
+        <span class="author-block">Sungjae Lee<sup>1</sup></span>
+        <span class="author-block">Jungseul Ok<sup>1</sup></span>
+      </div>
+
+      <div class="affil-block mb-5">
+        <sup>1</sup>POSTECH&nbsp;&nbsp;
+        <sup>2</sup>Microsoft Research Asia
+      </div>
+
+      <div class="buttons is-centered">
+        <a class="button is-dark is-rounded link-btn" href="https://arxiv.org/pdf/2610.02951" target="_blank" rel="noopener">
+          <span class="icon"><i class="fas fa-file-pdf"></i></span><span>Paper (PDF)</span>
+        </a>
+        <a class="button is-dark is-rounded link-btn" href="https://arxiv.org/abs/2610.02951" target="_blank" rel="noopener">
+          <span class="icon"><i class="fas fa-archive"></i></span><span>arXiv</span>
+        </a>
+        <span class="button is-rounded link-btn is-soon" title="Code will be released soon">
+          <span class="icon"><i class="fab fa-github"></i></span><span>Code (coming soon)</span>
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TL;DR / TEASER ===================== -->
+<section class="section pt-2">
+  <div class="container is-max-desktop">
+    <p class="is-size-5 has-text-centered mb-5">
+      <b>TL;DR</b> &mdash; One MoE backbone serving many agents should not use one expert mask.
+      DEP reads each agent's <b>system prompt and task input</b> and predicts a specialized expert mask
+      for it in a single small forward pass, with no per-workflow calibration.
+    </p>
+    <div class="columns is-vcentered">
+      <div class="column is-7 has-text-centered">
+        <img src="static/images/single_vs_multi_agent.png" alt="Static pruning holds up on a single agent but drops on a multi-agent workflow; DEP does not">
+      </div>
+      <div class="column is-5">
+        <p class="is-size-6 has-text-justified">
+          Same backbone, same 50% retention, same calibration data &mdash; only the serving setting changes.
+          Static masks (REAP, NAEE) that track the dense model for a <b>single agent</b> lose much of that accuracy
+          on a <b>multi-agent</b> workflow over the same tasks, ending up below the single agent they were meant to improve on.
+          A mask chosen per agent does not.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ABSTRACT ===================== -->
+<section class="section bg-soft">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 section-title has-text-centered mb-5">Abstract</h2>
+    <div class="content is-size-5 has-text-justified">
+      <p>
+        Mixture-of-Experts (MoE) architectures scale language models efficiently by activating only a few experts per
+        token, but the saving is confined to computation: every expert must stay resident on the accelerator, so memory
+        bounds where these models can be deployed. Expert pruning reduces this footprint, yet existing methods are
+        <b>static</b> &mdash; a single mask, calibrated offline, is applied to the model for every subsequent request.
+        This assumption can fail when the workload is heterogeneous, most prominently in multi-agent systems, where one
+        backbone serves many tasks and roles at once: our analysis shows that different tasks and roles recruit different
+        experts, while static methods assign one fixed subset to all of them. We therefore propose
+        <b>Dynamic Expert Pruning (DEP)</b>, which rests on a finding we establish here: an agent's system and task
+        prompts are by themselves sufficient to identify the experts that agent and its task require, since that text
+        already describes what the agent will do. A lightweight predictor, trained once on workflow transcripts, turns
+        those prompts into a specialized per-request mask in a single forward pass, with no per-configuration
+        calibration. Across diverse tasks and roles, model scales, and MoE architectures, DEP achieves better overall
+        accuracy than static pruning and merging baselines, and generalizes to workflows unseen in training without
+        retraining. Its margin over those baselines is largest when few experts are retained, suggesting that the role
+        specialization inherent to multi-agent systems permits sparser serving than static pruning allows.
+      </p>
+    </div>
+    <div class="has-text-centered mt-4">
+      <span class="pill">Mixture-of-Experts</span>
+      <span class="pill">Expert Pruning</span>
+      <span class="pill">Multi-Agent Systems</span>
+      <span class="pill">Efficient Serving</span>
+      <span class="pill">LLMs</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== HIGHLIGHTS ===================== -->
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 section-title has-text-centered mb-5">Highlights</h2>
+    <div class="columns is-multiline">
+      <div class="column is-6-tablet is-3-desktop">
+        <div class="hl-card">
+          <div class="num">63.4<small>%</small></div>
+          <p>mean accuracy at <b>25% retention</b> (16.4&nbsp;GB) on six workflows, vs. &le;&nbsp;6.7% for every static baseline.</p>
+        </div>
+      </div>
+      <div class="column is-6-tablet is-3-desktop">
+        <div class="hl-card">
+          <div class="num">75.9<small> / 82.2</small></div>
+          <p>mean accuracy at <b>50% retention</b>, vs. the unpruned model &mdash; with half the memory (29.9&nbsp;vs.&nbsp;56.9&nbsp;GB).</p>
+        </div>
+      </div>
+      <div class="column is-6-tablet is-3-desktop">
+        <div class="hl-card">
+          <div class="num">0<small> retraining</small></div>
+          <p>to serve <b>unseen workflows, families, benchmarks and domains</b> &mdash; the predictor reads prompts, not roster IDs.</p>
+        </div>
+      </div>
+      <div class="column is-6-tablet is-3-desktop">
+        <div class="hl-card">
+          <div class="num">~1<small>% overhead</small></div>
+          <p>for prediction and expert swapping, yet DEP <b>finishes faster</b> than static masks, which degenerate into repetition.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== MOTIVATION ===================== -->
+<section class="section bg-soft">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 section-title has-text-centered mb-5">Why Static Masks Fail</h2>
+    <div class="content is-size-5 has-text-justified">
+      <p>
+        We segment agent outputs into nine <i>discourse operators</i> (Framing, Planning, Deriving, Computing, Concluding,
+        Judging, Describing, Reviewing, Testing) to describe behavior independently of agent identity. Three facts follow:
+        <b>different agents generate different operators</b>, <b>different operators route to different experts</b>
+        (2.2&ndash;19&times; a permutation null, $p \le .006$), and so <b>different agents use different experts</b>.
+        A prefill control shows the prompt acts by changing <i>what the agent writes</i>, and what it writes determines
+        where it routes &mdash; so the prompt already carries what is needed to anticipate an agent's experts
+        before generation begins.
+      </p>
+    </div>
+    <figure class="has-text-centered mt-4">
+      <img src="static/images/fig_motivation_panel.png" alt="Per-agent and per-operator expert usage, and operator share per role">
+      <figcaption class="figure-caption">
+        <b>Agents differ in what they do, and therefore in the experts they use.</b>
+        (a) Per-role and (b) per-operator expert usage (HumanEval+, layer 24; deviation from the row mean over the top-64
+        experts, percentage points); (c) share of each role's segments per operator, across three tasks.
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ===================== METHOD ===================== -->
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 section-title has-text-centered mb-5">Method</h2>
+
+    <div class="pipeline has-text-centered mb-5">
+      <svg viewBox="0 0 960 230" role="img" aria-label="DEP pipeline: agent prompts go into a small predictor, which outputs a top-K expert mask per layer; the mask is applied at the router of a frozen MoE backbone and only kept experts are resident on the GPU">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#5b6b80"/>
+          </marker>
+        </defs>
+        <style>
+          .bx { fill:#fbfcfe; stroke:#c5d3e3; stroke-width:1.5; rx:12; }
+          .bx-a { fill:#e6f0fa; stroke:#1f6fb2; stroke-width:1.8; }
+          .t { font: 600 15px sans-serif; fill:#1a1a2e; }
+          .s { font: 13px sans-serif; fill:#555; }
+          .ln { stroke:#5b6b80; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+        </style>
+        <!-- prompts -->
+        <rect class="bx" x="10" y="40" width="190" height="150" rx="12"/>
+        <text class="t" x="105" y="70" text-anchor="middle">Agent request</text>
+        <rect x="28" y="88" width="154" height="38" rx="6" fill="#fff" stroke="#d9e2ec"/>
+        <text class="s" x="105" y="112" text-anchor="middle">system prompt p<tspan baseline-shift="sub" font-size="10">a</tspan></text>
+        <rect x="28" y="136" width="154" height="38" rx="6" fill="#fff" stroke="#d9e2ec"/>
+        <text class="s" x="105" y="160" text-anchor="middle">task input q</text>
+        <path class="ln" d="M200,115 L262,115"/>
+        <!-- predictor -->
+        <rect class="bx bx-a" x="266" y="40" width="200" height="150" rx="12"/>
+        <text class="t" x="366" y="70" text-anchor="middle">Mask predictor</text>
+        <text class="s" x="366" y="98" text-anchor="middle">Qwen2-0.5B encoder</text>
+        <text class="s" x="366" y="118" text-anchor="middle">+ MLP head</text>
+        <text class="s" x="366" y="146" text-anchor="middle">one forward pass</text>
+        <text class="s" x="366" y="166" text-anchor="middle">per (agent, problem)</text>
+        <path class="ln" d="M466,115 L528,115"/>
+        <!-- mask grid -->
+        <rect class="bx" x="532" y="40" width="170" height="150" rx="12"/>
+        <text class="t" x="617" y="70" text-anchor="middle">Top-K mask</text>
+        <g transform="translate(562,84)">
+          <!-- 6 rows x 10 cols, ~half kept -->
+          <g fill="#1f6fb2">
+            <rect x="0" y="0" width="9" height="9"/><rect x="22" y="0" width="9" height="9"/><rect x="33" y="0" width="9" height="9"/><rect x="66" y="0" width="9" height="9"/><rect x="88" y="0" width="9" height="9"/>
+            <rect x="11" y="13" width="9" height="9"/><rect x="33" y="13" width="9" height="9"/><rect x="44" y="13" width="9" height="9"/><rect x="77" y="13" width="9" height="9"/><rect x="99" y="13" width="9" height="9"/>
+            <rect x="0" y="26" width="9" height="9"/><rect x="11" y="26" width="9" height="9"/><rect x="55" y="26" width="9" height="9"/><rect x="66" y="26" width="9" height="9"/><rect x="88" y="26" width="9" height="9"/>
+            <rect x="22" y="39" width="9" height="9"/><rect x="44" y="39" width="9" height="9"/><rect x="55" y="39" width="9" height="9"/><rect x="77" y="39" width="9" height="9"/><rect x="99" y="39" width="9" height="9"/>
+            <rect x="0" y="52" width="9" height="9"/><rect x="33" y="52" width="9" height="9"/><rect x="44" y="52" width="9" height="9"/><rect x="66" y="52" width="9" height="9"/><rect x="88" y="52" width="9" height="9"/>
+            <rect x="11" y="65" width="9" height="9"/><rect x="22" y="65" width="9" height="9"/><rect x="55" y="65" width="9" height="9"/><rect x="77" y="65" width="9" height="9"/><rect x="99" y="65" width="9" height="9"/>
+          </g>
+        </g>
+        <text class="s" x="617" y="176" text-anchor="middle">K experts kept per layer</text>
+        <path class="ln" d="M702,115 L764,115"/>
+        <!-- backbone -->
+        <rect class="bx" x="768" y="40" width="182" height="150" rx="12"/>
+        <text class="t" x="859" y="70" text-anchor="middle">Frozen MoE</text>
+        <text class="s" x="859" y="98" text-anchor="middle">masked router logits</text>
+        <text class="s" x="859" y="118" text-anchor="middle">&rarr; &minus;&infin;</text>
+        <text class="s" x="859" y="146" text-anchor="middle">only kept experts</text>
+        <text class="s" x="859" y="166" text-anchor="middle">resident on GPU</text>
+        <text class="s" x="480" y="220" text-anchor="middle">Mask is fixed for the whole turn; at agent hand-offs only the set difference of experts is swapped (delta loading).</text>
+      </svg>
+    </div>
+
+    <div class="content is-size-5 has-text-justified">
+      <p>
+        <b>One-shot mask prediction.</b> A small predictor $f_\theta$ (a Qwen2-0.5B encoder plus an MLP head) reads the
+        concatenated agent system prompt and task input and outputs per-layer expert scores
+        $S \in \mathbb{R}^{L \times E}$; the mask keeps the top-$K$ experts in every layer:
+      </p>
+      <div class="eq-box has-text-centered">
+        $$m_{\ell e} = \mathbf{1}\!\left[ S_{\ell e} \ge \tau_K(S_\ell) \right], \qquad \textstyle\sum_e m_{\ell e} = K \;\; \forall \ell .$$
+      </div>
+      <p>
+        The mask is installed at the router of the frozen backbone (masked logits set to $-\infty$), so per-token top-$k$
+        routing runs unchanged inside the kept set and model weights are untouched. Because the predictor conditions on
+        prompt text rather than a roster identifier, <b>any new agent or workflow gets a mask in one shot</b>.
+      </p>
+      <p>
+        <b>Training.</b> The predictor is trained once on transcripts of the dense backbone running the training
+        workflows, mixing two signals: an <i>impact-coverage</i> target (per-example REAP saliency, binarized at top-$K$,
+        with BCE) that says which experts mattered, and <i>self-distillation</i> that measures what a candidate mask
+        breaks, using a temperature-annealed soft top-$K$:
+      </p>
+      <div class="eq-box has-text-centered">
+        $$\mathcal{L} = \alpha\, \frac{1}{|\mathcal{R}|}\sum_{t \in \mathcal{R}} \mathrm{KL}\!\left(P_{\mathcal{M}}(\cdot \mid x_{&lt;t}) \,\Vert\, P_{\mathcal{M}\odot\tilde m}(\cdot \mid x_{&lt;t})\right) + (1-\alpha)\,\mathrm{BCE}\big(\sigma(S),\, m^\star\big).$$
+      </div>
+      <p>
+        <b>Serving with delta loading.</b> Only the $K$ kept experts per layer are resident, so memory shrinks nearly in
+        proportion to the retention $\rho = K/E$. Masks are cached by $(p_a, q)$; at an agent hand-off the engine copies
+        only the experts that differ between consecutive masks, and the next agent's delta can be prefetched because the
+        workflow topology is known in advance.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== MAIN RESULTS ===================== -->
+<section class="section bg-soft">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 section-title has-text-centered mb-5">Main Results</h2>
+    <p class="is-size-5 has-text-justified mb-5">
+      Qwen3-30B-A3B serving six multi-agent workflows discovered by AFlow. Every static baseline is calibrated on the
+      <i>same</i> transcripts that train DEP. Each static method collapses somewhere; DEP is the only policy that does
+      not, and its margin is largest at 25% retention.
+    </p>
+
+    <div class="table-container">
+      <table class="table is-fullwidth is-hoverable result-table has-text-centered">
+        <thead>
+          <tr>
+            <th class="has-text-left">Method</th>
+            <th>MATH-500</th><th>GSM8K</th><th>HumanEval+</th><th>MBPP+</th><th>MMLU</th><th>HotpotQA</th><th><i>Mean</i></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="has-text-left">Dense (56.9&nbsp;GB)</td><td>68.3</td><td>97.3</td><td>92.8</td><td>80.0</td><td>82.7</td><td>71.9</td><td>82.2</td></tr>
+          <tr><td colspan="8" class="group">50% retention &mdash; keep 64/128 experts, 29.9&nbsp;GB resident</td></tr>
+          <tr><td class="has-text-left">Freq.</td><td>62.3</td><td><b>95.3</b></td><td class="collapse">2.9</td><td class="collapse">3.0</td><td>51.0</td><td><b>65.4</b></td><td>46.7</td></tr>
+          <tr><td class="has-text-left">REAP</td><td>40.7</td><td>71.3</td><td>78.7</td><td>45.7</td><td>40.3</td><td>47.3</td><td>54.0</td></tr>
+          <tr><td class="has-text-left">HC-SMoE</td><td>60.3</td><td>84.0</td><td>75.8</td><td>75.0</td><td>48.3</td><td>60.4</td><td>67.3</td></tr>
+          <tr class="ours-row"><td class="has-text-left">DEP (ours)</td><td>67.3</td><td>95.3</td><td>84.5</td><td>76.7</td><td>70.7</td><td>60.7</td><td>75.9</td></tr>
+          <tr><td colspan="8" class="group">25% retention &mdash; keep 32/128 experts, 16.4&nbsp;GB resident</td></tr>
+          <tr><td class="has-text-left">Freq.</td><td>4.0</td><td>2.3</td><td>0.0</td><td>0.0</td><td>0.7</td><td>0.2</td><td>1.2</td></tr>
+          <tr><td class="has-text-left">REAP</td><td>5.3</td><td>7.7</td><td>0.0</td><td>12.3</td><td>10.7</td><td>4.3</td><td>6.7</td></tr>
+          <tr><td class="has-text-left">HC-SMoE</td><td>2.7</td><td>0.7</td><td>0.0</td><td>0.3</td><td>26.3</td><td>5.0</td><td>5.8</td></tr>
+          <tr class="ours-row"><td class="has-text-left">DEP (ours)</td><td>51.3</td><td>87.7</td><td>78.3</td><td>61.7</td><td>48.0</td><td>53.7</td><td>63.4</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="is-size-7 has-text-grey has-text-centered">
+      Accuracy %, mean over 3 seeds &times; 100 held-out problems (HumanEval+ capped at 69). HotpotQA: SQuAD-F1. Std. devs. in the paper.
+    </p>
+
+    <div class="columns is-vcentered mt-5">
+      <div class="column is-6 has-text-centered">
+        <img src="static/images/pareto_curve6.png" alt="Accuracy vs resident memory: DEP stays high down to 16 GB while REAP and Freq collapse">
+      </div>
+      <div class="column is-6">
+        <p class="is-size-5 has-text-justified">
+          <b>Accuracy&ndash;memory frontier.</b> DEP holds accuracy at footprints where both static masks have already
+          collapsed, and reconverges with them only at mild compression, where pruning is nearly free for everyone.
+          A wrong mask does not just answer worse &mdash; it degenerates into repetition up to the generation cap, so
+          DEP also finishes <i>faster</i> end-to-end despite paying for expert swaps.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== GENERALIZATION & SCALE ===================== -->
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 section-title has-text-centered mb-5">Generalization, Scale, and Architecture</h2>
+    <div class="content is-size-5 has-text-justified">
+      <p>
+        <b>Unseen workflows.</b> One universal predictor, trained on a pool of 32 discovered workflows over three tasks
+        and then frozen, is evaluated on a ladder of increasing distance from training: unseen workflow structures, an
+        unseen workflow family, unseen benchmarks (SVAMP, MBPP) and an unseen domain (MMLU). With no retraining or
+        recalibration, DEP is the strongest policy on most rungs at both retentions. Expert merging (HC-SMoE) stays
+        competitive while the budget is loose but collapses at 25%; REAP remains competitive on code.
+      </p>
+    </div>
+
+    <div class="columns mt-4">
+      <div class="column">
+        <h3 class="title is-5 has-text-centered">SWE-bench Verified (resolve %, &rho;&nbsp;=&nbsp;50%)</h3>
+        <table class="table is-fullwidth result-table has-text-centered">
+          <thead><tr><th class="has-text-left">Method</th><th>Coder-30B</th><th>Coder-480B</th></tr></thead>
+          <tbody>
+            <tr><td class="has-text-left">Dense (workflow)</td><td>40.0</td><td>56.0</td></tr>
+            <tr><td class="has-text-left">Direct (single call)</td><td>12.0</td><td>50.0</td></tr>
+            <tr><td class="has-text-left">Freq.</td><td>2.0</td><td>0.0</td></tr>
+            <tr><td class="has-text-left">REAP</td><td>22.0</td><td>44.0</td></tr>
+            <tr class="ours-row"><td class="has-text-left">DEP (ours)</td><td>30.0</td><td>50.0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="column">
+        <h3 class="title is-5 has-text-centered">DeepSeek-V2.5-236B (mean over 5 tasks, %)</h3>
+        <table class="table is-fullwidth result-table has-text-centered">
+          <thead><tr><th class="has-text-left">Method</th><th>&rho;&nbsp;=&nbsp;50%</th><th>&rho;&nbsp;=&nbsp;25%</th></tr></thead>
+          <tbody>
+            <tr><td class="has-text-left">Dense (workflow)</td><td colspan="2">70.7</td></tr>
+            <tr><td class="has-text-left">Direct (single call)</td><td colspan="2">71.4</td></tr>
+            <tr><td class="has-text-left">Freq.</td><td>33.0</td><td>0.8</td></tr>
+            <tr><td class="has-text-left">REAP</td><td>46.5</td><td>1.5</td></tr>
+            <tr class="ours-row"><td class="has-text-left">DEP (ours)</td><td>51.7</td><td>6.9</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="is-size-7 has-text-grey has-text-centered">
+      SWE-bench: fixed 50-instance subset, oracle-assisted setting, so the ordering of policies rather than the absolute
+      rate is the result. On DeepSeek every policy, DEP included, becomes unusable at 25%: how far a backbone tolerates
+      pruning must be measured per backbone.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== ANALYSIS ===================== -->
+<section class="section bg-soft">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 section-title has-text-centered mb-5">Predicted Masks Specialize by Task and Role</h2>
+    <div class="columns is-vcentered is-mobile is-multiline">
+      <div class="column is-4-tablet is-12-mobile has-text-centered"><img src="static/images/fig_het_bench.png" alt="Jaccard overlap of predicted masks between benchmarks"></div>
+      <div class="column is-4-tablet is-6-mobile has-text-centered"><img src="static/images/fig_het_math.png" alt="Jaccard overlap of predicted masks between MATH team agents"></div>
+      <div class="column is-4-tablet is-6-mobile has-text-centered"><img src="static/images/fig_het_he.png" alt="Jaccard overlap of predicted masks between HumanEval+ team agents"></div>
+    </div>
+    <p class="figure-caption has-text-centered">
+      Jaccard overlap of predicted kept-expert masks at $\rho = 50\%$ (chance = 0.33). (a) Between benchmarks;
+      (b, c) between the agents of the MATH and HumanEval+ teams. Measured on hand-crafted agent teams.
+    </p>
+    <div class="content is-size-5 has-text-justified mt-4">
+      <p>
+        Without any supervision on this structure, domains that share skills share experts (MATH&nbsp;&harr;&nbsp;GSM8K,
+        HumanEval+&nbsp;&harr;&nbsp;MBPP+), overlap drops sharply across domain boundaries, and within a team the Coder
+        keeps a visibly distinct expert set &mdash; the specialization a single static mask cannot express.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== BIBTEX ===================== -->
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 section-title has-text-centered mb-5">BibTeX</h2>
+    <pre class="bibtex">@article{koo2026dep,
+  title   = {Dynamic Expert Pruning for Multi-Agent Systems},
+  author  = {Koo, Jabin and Abbasloo, Soheil and Lee, Sungjae and Ok, Jungseul},
+  journal = {arXiv preprint arXiv:2610.02951},
+  year    = {2026}
+}</pre>
+  </div>
+</section>
+
+<!-- ===================== FOOTER ===================== -->
+<footer class="footer">
+  <div class="container has-text-centered">
+    <p class="is-size-7 has-text-grey">
+      Website template adapted from the
+      <a href="https://github.com/nerfies/nerfies.github.io">Nerfies</a> project page (CC BY-SA 4.0).
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
